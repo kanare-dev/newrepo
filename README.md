@@ -97,6 +97,26 @@ GitHub:
 https://github.com/you/my-project
 ```
 
+### 前提条件のチェック（`--doctor`）
+
+`git` / `gh` のインストール状況と GitHub CLI の認証状態だけを確認したい場合は
+`--doctor` フラグを使います（リポジトリの作成は行いません）。
+
+```bash
+newrepo --doctor
+```
+
+```
+$ newrepo --doctor
+Checking environment...
+✓ git is installed
+✓ gh is installed
+✓ gh is authenticated
+All checks passed. newrepo is ready to use.
+```
+
+いずれかのチェックに失敗した場合は `✗` と対処方法が表示され、終了コード 1 で終了します。
+
 ## エラーハンドリング
 
 以下のケースでは、処理を中断しわかりやすいエラーメッセージを表示します（終了コード 1）。
@@ -132,7 +152,8 @@ newrepo/
 │       ├── shell.py        # subprocess 実行の薄いラッパー
 │       └── exceptions.py   # ユーザー向けメッセージを持つ例外クラス群
 └── tests/
-    └── test_local_repo.py
+    ├── test_local_repo.py
+    └── test_cli_doctor.py
 ```
 
 ### 判断理由
@@ -150,6 +171,17 @@ newrepo/
   分けることで、将来的にローカル操作だけを再利用したり、
   GitHub 以外のホスティング（GitLab等）に対応したりする際の変更範囲を
   局所化できます。
+
+- **`--doctor` はサブコマンドではなくフラグとして実装**
+  `newrepo my-project` のように NAME を位置引数として受け取りつつ、
+  `newrepo doctor` のような名前付きサブコマンドも共存させようとすると、
+  Click（Typerの内部実装）の引数解析の都合上、
+  「`doctor` がサブコマンド名なのか、作成したいリポジトリ名なのか」を
+  区別できず誤動作することを実装時に確認しました。
+  この曖昧さを避けるため、事前チェックは `newrepo --doctor` という
+  フラグとして実装し、既存の `newrepo <name>` の呼び出し方は一切変更していません。
+  実体は `preflight.py` の `run_checks()` を呼び出すだけで、
+  作成フロー用の `run_all()` と実装を共有しています。
 
 - **例外は基底クラス `NewRepoError` を継承した専用クラスで表現**
   `DependencyNotFoundError` / `GitHubAuthError` / `DirectoryExistsError` /

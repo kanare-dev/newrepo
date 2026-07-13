@@ -28,11 +28,33 @@ def _step(label: str, action: Callable[[], None]) -> None:
     typer.secho(f"✓ {label}", fg=typer.colors.GREEN)
 
 
+def _run_doctor() -> None:
+    """git / gh の準備状況をチェックし、結果を表示して終了する。"""
+    typer.echo("Checking environment...")
+
+    results = preflight.run_checks()
+    for result in results:
+        if result.ok:
+            typer.secho(f"✓ {result.label}", fg=typer.colors.GREEN)
+        else:
+            typer.secho(f"✗ {result.label}", fg=typer.colors.RED)
+            if result.detail:
+                typer.secho(f"  → {result.detail}", fg=typer.colors.RED)
+
+    if all(result.ok for result in results):
+        typer.echo("All checks passed. newrepo is ready to use.")
+        raise typer.Exit(code=0)
+
+    typer.echo("Some checks failed. Please fix the issues above before using newrepo.")
+    raise typer.Exit(code=1)
+
+
 @app.command()
 def main(
-    name: str = typer.Argument(
-        ...,
-        help="作成するリポジトリ名（ローカルディレクトリ名 = GitHub リポジトリ名）",
+    name: Optional[str] = typer.Argument(
+        None,
+        help="作成するリポジトリ名(ローカルディレクトリ名 = GitHub リポジトリ名)。"
+        "--doctor 指定時は不要。",
     ),
     public: bool = typer.Option(
         False,
@@ -45,8 +67,25 @@ def main(
         "-d",
         help="作成先の親ディレクトリ（デフォルト: カレントディレクトリ）",
     ),
+    doctor: bool = typer.Option(
+        False,
+        "--doctor",
+        help="git/gh のインストール状況と GitHub CLI の認証状態のみを確認して終了する",
+    ),
 ) -> None:
     """新規ディレクトリの作成から GitHub への push までを一括実行する。"""
+    if doctor:
+        _run_doctor()
+        return
+
+    if name is None:
+        typer.secho(
+            "エラー: NAME を指定してください（例: newrepo my-project）",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     base_dir = (directory or Path.cwd()).expanduser().resolve()
     target = base_dir / name
 

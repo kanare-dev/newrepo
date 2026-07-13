@@ -147,6 +147,40 @@ https://github.com/you/new-project-name
 対象ディレクトリが存在しない・git リポジトリでない・
 remote `origin` が設定されていない、といった場合は何も変更せずエラーで停止します。
 
+### バージョン確認（`--version`）
+
+```bash
+$ newrepo --version
+newrepo 0.2.0
+```
+
+## バージョン管理
+
+`pyproject.toml` の `version` フィールドを唯一の情報源としています。
+`newrepo --version` はソースコードにバージョン文字列を埋め込むのではなく、
+インストール済みパッケージのメタデータ（`importlib.metadata`）経由で取得しているため、
+バージョンを上げる際に更新箇所は `pyproject.toml` の1箇所だけで済みます。
+
+バージョンを上げるには [`uv version`](https://docs.astral.sh/uv/reference/cli/#uv-version)
+コマンドを使います（`pyproject.toml` の書き換えと再ロックまで行ってくれます）。
+
+```bash
+# 現在のバージョンを確認
+uv version
+
+# 例: 0.2.0 -> 0.3.0（マイナーバージョンを上げる）
+uv version --bump minor
+
+# 例: 0.2.0 -> 0.2.1（パッチバージョンを上げる）
+uv version --bump patch
+
+# 特定のバージョンを直接指定する
+uv version 1.0.0
+```
+
+バージョンを上げたあとは `uv tool install --editable . --force` で
+インストール済みの `newrepo` コマンドにも反映されます。
+
 ## エラーハンドリング
 
 以下のケースでは、処理を中断しわかりやすいエラーメッセージを表示します（終了コード 1）。
@@ -184,7 +218,8 @@ newrepo/
 └── tests/
     ├── test_local_repo.py
     ├── test_github_repo.py
-    └── test_cli_doctor.py
+    ├── test_cli_doctor.py
+    └── test_cli_version.py
 ```
 
 ### 判断理由
@@ -202,6 +237,14 @@ newrepo/
   分けることで、将来的にローカル操作だけを再利用したり、
   GitHub 以外のホスティング（GitLab等）に対応したりする際の変更範囲を
   局所化できます。
+
+- **バージョンは `pyproject.toml` を唯一の情報源にする**
+  `--version` はソースコードにバージョン文字列を直書きせず、
+  `importlib.metadata.version("newrepo")` でインストール済みパッケージの
+  メタデータから取得しています。こうすることで `pyproject.toml` の
+  `version` フィールドを更新するだけで CLI 表示にも自動的に反映され、
+  値の二重管理（コードとの食い違い）を避けられます。
+  バージョンの更新自体は `uv version --bump minor` 等の `uv` コマンドに任せています。
 
 - **`--doctor` はサブコマンドではなくフラグとして実装**
   `newrepo my-project` のように NAME を位置引数として受け取りつつ、

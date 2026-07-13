@@ -1,6 +1,6 @@
 [project]
 name = "newrepo"
-version = "0.1.0"
+version = "0.2.0"
 description = "GitHubリポジトリ作成時の定型作業（ディレクトリ作成〜README〜git init〜Initial Commit〜GitHubリポジトリ作成〜push）を自動化するCLIツール"
 readme = "README.md"
 authors = [

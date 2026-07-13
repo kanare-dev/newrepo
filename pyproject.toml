@@ -1,0 +1,24 @@
+[project]
+name = "newrepo"
+version = "0.1.0"
+description = "GitHubリポジトリ作成時の定型作業（ディレクトリ作成〜README〜git init〜Initial Commit〜GitHubリポジトリ作成〜push）を自動化するCLIツール"
+readme = "README.md"
+authors = [
+    { name = "kanare-dev", email = "me@kanare.dev" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "typer>=0.15.1",
+]
+
+[project.scripts]
+newrepo = "newrepo.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+]

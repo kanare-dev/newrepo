@@ -1,12 +1,14 @@
 """newrepo の CLI エントリポイント。
 
-``newrepo <name>`` 実行時の一連の処理（ディレクトリ作成 → README作成 →
-git init → Initial Commit → GitHub リポジトリ作成 → push）を
-順番に実行し、各ステップの結果を画面に出力する。
+サブコマンド構成:
 
-``--doctor`` / ``--rename`` はサブコマンドではなくオプションとして実装している。
-NAME を位置引数として受け取る単一コマンドに Typer のサブコマンドを追加すると、
-Click の引数解析上「サブコマンド名」と「NAME」を区別できず誤動作するため。
+- ``newrepo create NAME [OPTIONS]``            新規リポジトリの作成
+- ``newrepo doctor``                           前提条件（git/gh）の確認
+- ``newrepo rename NAME NEW_NAME [OPTIONS]``    リポジトリのリネーム
+- ``newrepo --version``                        バージョン表示
+
+``--version`` だけは他の CLI ツール（git, docker 等）の慣例に合わせ、
+サブコマンドではなくトップレベルのフラグとして実装している。
 """
 
 from __future__ import annotations
@@ -42,14 +44,82 @@ def _version_callback(value: bool) -> None:
     raise typer.Exit()
 
 
+@app.callback(invoke_without_command=True)
+def entry_point(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        False,
+        "--version",
+        help="バージョンを表示して終了する",
+        callback=_version_callback,
+        is_eager=True,
+    ),
+) -> None:
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit()
+
+
 def _step(label: str, action: Callable[[], None]) -> None:
     """1つの作業ステップを実行し、成功したらチェックマーク付きで表示する。"""
     action()
     typer.secho(f"✓ {label}", fg=typer.colors.GREEN)
 
 
-def _run_doctor() -> None:
-    """git / gh の準備状況をチェックし、結果を表示して終了する。"""
+@app.command()
+def create(
+    name: str = typer.Argument(
+        help="作成するリポジトリ名（ローカルディレクトリ名 = GitHub リポジトリ名）",
+    ),
+    public: bool = typer.Option(
+        False,
+        "--public",
+        help="GitHub リポジトリを Public として作成する（デフォルト: Private）",
+    ),
+    directory: Path | None = typer.Option(
+        None,
+        "--directory",
+        "-d",
+        help="作成先の親ディレクトリ（デフォルト: カレントディレクトリ）",
+    ),
+) -> None:
+    """新規ディレクトリの作成から GitHub への push までを一括実行する。"""
+    base_dir = (directory or Path.cwd()).expanduser().resolve()
+    target = base_dir / name
+
+    typer.echo("Creating repository...")
+
+    try:
+        preflight.run_all()
+
+        _step("Directory created", lambda: local_repo.create_directory(target))
+        _step("README created", lambda: local_repo.create_readme(target, name))
+        _step("Git initialized", lambda: local_repo.git_init(target))
+
+        local_repo.git_add_all(target)
+        _step("Initial commit created", lambda: local_repo.git_commit(target))
+
+        _step(
+            "GitHub repository created",
+            lambda: github_repo.create_repo(target, name, public),
+        )
+        _step("Pushed to origin", lambda: github_repo.push(target))
+    except NewRepoError as exc:
+        typer.secho(f"✗ {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    github_url = github_repo.get_repo_url(target)
+
+    typer.echo("Repository created successfully")
+    typer.echo("Location:")
+    typer.echo(str(target))
+    typer.echo("GitHub:")
+    typer.echo(github_url)
+
+
+@app.command()
+def doctor() -> None:
+    """git / gh のインストール状況と GitHub CLI の認証状態を確認する。"""
     typer.echo("Checking environment...")
 
     results = preflight.run_checks()
@@ -69,7 +139,19 @@ def _run_doctor() -> None:
     raise typer.Exit(code=1)
 
 
-def _run_rename(name: str, new_name: str, directory: Path | None) -> None:
+@app.command()
+def rename(
+    name: str = typer.Argument(
+        help="現在のリポジトリ名（ローカルディレクトリ名 = GitHub リポジトリ名）",
+    ),
+    new_name: str = typer.Argument(help="変更後の新しい名前"),
+    directory: Path | None = typer.Option(
+        None,
+        "--directory",
+        "-d",
+        help="対象の親ディレクトリ（デフォルト: カレントディレクトリ）",
+    ),
+) -> None:
     """既存のリポジトリを、ローカルディレクトリ・GitHub の両方でリネームする。"""
     if new_name == name:
         typer.secho(
@@ -113,102 +195,6 @@ def _run_rename(name: str, new_name: str, directory: Path | None) -> None:
     typer.echo("Repository renamed successfully")
     typer.echo("Location:")
     typer.echo(str(new_target))
-    typer.echo("GitHub:")
-    typer.echo(github_url)
-
-
-@app.command()
-def main(
-    name: str | None = typer.Argument(
-        None,
-        help="作成/操作対象のリポジトリ名(ローカルディレクトリ名 = GitHub リポジトリ名)。"
-        "--doctor / --version 指定時は不要。",
-    ),
-    version: bool = typer.Option(
-        False,
-        "--version",
-        help="バージョンを表示して終了する",
-        callback=_version_callback,
-        is_eager=True,
-    ),
-    public: bool = typer.Option(
-        False,
-        "--public",
-        help="GitHub リポジトリを Public として作成する（デフォルト: Private）",
-    ),
-    directory: Path | None = typer.Option(
-        None,
-        "--directory",
-        "-d",
-        help="対象の親ディレクトリ（デフォルト: カレントディレクトリ）",
-    ),
-    doctor: bool = typer.Option(
-        False,
-        "--doctor",
-        help="git/gh のインストール状況と GitHub CLI の認証状態のみを確認して終了する",
-    ),
-    rename: str | None = typer.Option(
-        None,
-        "--rename",
-        metavar="NEW_NAME",
-        help="NAME で指定した既存のリポジトリを NEW_NAME にリネームする"
-        "（ローカルディレクトリ・GitHub リポジトリの両方）",
-    ),
-) -> None:
-    """新規ディレクトリの作成から GitHub への push までを一括実行する。"""
-    if doctor:
-        _run_doctor()
-        return
-
-    if rename is not None:
-        if name is None:
-            typer.secho(
-                "エラー: リネーム対象の現在の名前（NAME）を指定してください"
-                "（例: newrepo my-project --rename new-name）",
-                fg=typer.colors.RED,
-                err=True,
-            )
-            raise typer.Exit(code=1)
-        _run_rename(name=name, new_name=rename, directory=directory)
-        return
-
-    if name is None:
-        typer.secho(
-            "エラー: NAME を指定してください（例: newrepo my-project）",
-            fg=typer.colors.RED,
-            err=True,
-        )
-        raise typer.Exit(code=1)
-
-    base_dir = (directory or Path.cwd()).expanduser().resolve()
-    target = base_dir / name
-
-    typer.echo("Creating repository...")
-
-    try:
-        preflight.run_all()
-
-        _step("Directory created", lambda: local_repo.create_directory(target))
-        _step("README created", lambda: local_repo.create_readme(target, name))
-        _step("Git initialized", lambda: local_repo.git_init(target))
-
-        local_repo.git_add_all(target)
-        _step("Initial commit created", lambda: local_repo.git_commit(target))
-
-        _step(
-            "GitHub repository created",
-            lambda: github_repo.create_repo(target, name, public),
-        )
-        _step("Pushed to origin", lambda: github_repo.push(target))
-    except NewRepoError as exc:
-        typer.secho(f"✗ {exc}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(code=1) from exc
-
-    github_url = github_repo.get_repo_url(target)
-
-    typer.echo("Repository created successfully")
-    typer.echo("Location:")
-    typer.echo(str(target))
     typer.echo("GitHub:")
     typer.echo(github_url)
 

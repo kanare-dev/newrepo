@@ -5,7 +5,7 @@
 GitHub リポジトリ作成時の定型作業を自動化する CLI ツールです。
 
 ```
-newrepo my-project
+newrepo create my-project
 ```
 
 を実行するだけで、以下を一括で行います。
@@ -57,34 +57,35 @@ uv run newrepo --help
 
 ## 使い方
 
-### 基本（カレントディレクトリ配下に作成）
+`newrepo` は `create` / `doctor` / `rename` の3つのサブコマンドを持ちます。
+
+### `newrepo create` — リポジトリの作成
 
 ```bash
-newrepo my-project
+newrepo create my-project
 ```
 
 `./my-project` ディレクトリが作成され、GitHub 上に **Private** リポジトリとして
 `my-project` が作成・push されます。
 
-### Public リポジトリとして作成する
+Public リポジトリとして作成する場合:
 
 ```bash
-newrepo my-project --public
+newrepo create my-project --public
 ```
 
-### 作成先ディレクトリを指定する
+作成先ディレクトリを指定する場合（省略時はカレントディレクトリ配下）:
 
 ```bash
-newrepo my-project --directory ~/projects
+newrepo create my-project --directory ~/projects
 ```
 
-`~/projects/my-project` が作成されます。`--directory` を省略した場合は
-カレントディレクトリ配下に作成されます。
+`~/projects/my-project` が作成されます。
 
-### 実行例（成功時の出力）
+実行例（成功時の出力）:
 
 ```
-$ newrepo my-project
+$ newrepo create my-project
 Creating repository...
 ✓ Directory created
 ✓ README created
@@ -99,17 +100,13 @@ GitHub:
 https://github.com/you/my-project
 ```
 
-### 前提条件のチェック（`--doctor`）
+### `newrepo doctor` — 前提条件のチェック
 
-`git` / `gh` のインストール状況と GitHub CLI の認証状態だけを確認したい場合は
-`--doctor` フラグを使います（リポジトリの作成は行いません）。
+`git` / `gh` のインストール状況と GitHub CLI の認証状態だけを確認したい場合に使います
+（リポジトリの作成は行いません）。
 
 ```bash
-newrepo --doctor
-```
-
-```
-$ newrepo --doctor
+$ newrepo doctor
 Checking environment...
 ✓ git is installed
 ✓ gh is installed
@@ -119,19 +116,19 @@ All checks passed. newrepo is ready to use.
 
 いずれかのチェックに失敗した場合は `✗` と対処方法が表示され、終了コード 1 で終了します。
 
-### リポジトリ名の変更（`--rename`）
+### `newrepo rename` — リポジトリ名の変更
 
 作成済みのリポジトリの名前を、ローカルディレクトリ・GitHub リポジトリの
-両方で一度に変更できます。`newrepo` を作成時と同じ、親ディレクトリから
-実行します（対象ディレクトリの中に入る必要はありません）。
+両方で一度に変更できます。`create` のときと同じく、対象ディレクトリの
+親ディレクトリから実行します（対象ディレクトリの中に入る必要はありません）。
 
 ```bash
-newrepo my-project --rename new-project-name
-newrepo my-project --rename new-project-name --directory ~/projects
+newrepo rename my-project new-project-name
+newrepo rename my-project new-project-name --directory ~/projects
 ```
 
 ```
-$ newrepo my-project --rename new-project-name
+$ newrepo rename my-project new-project-name
 Renaming repository...
 ✓ GitHub repository renamed
 ✓ Remote URL updated
@@ -149,7 +146,10 @@ https://github.com/you/new-project-name
 対象ディレクトリが存在しない・git リポジトリでない・
 remote `origin` が設定されていない、といった場合は何も変更せずエラーで停止します。
 
-### バージョン確認（`--version`）
+### `newrepo --version` — バージョン確認
+
+`--version` だけは `git` / `docker` 等の慣例に合わせ、サブコマンドではなく
+トップレベルのフラグとして実装しています。
 
 ```bash
 $ newrepo --version
@@ -225,28 +225,42 @@ newrepo/
 ├── src/
 │   └── newrepo/
 │       ├── __init__.py     # パッケージエントリポイント（app を re-export）
-│       ├── cli.py          # Typer アプリ定義。処理フローの組み立てと画面出力のみを担当
+│       ├── cli.py          # Typer アプリ定義。サブコマンドの組み立てと画面出力のみを担当
 │       ├── preflight.py    # git / gh の存在確認、gh auth 確認
 │       ├── local_repo.py   # ディレクトリ作成・README作成・git 操作（ローカルのみ）
-│       ├── github_repo.py  # gh によるリポジトリ作成・push・URL取得（GitHubのみ）
+│       ├── github_repo.py  # gh によるリポジトリ作成・push・URL取得・リネーム（GitHubのみ）
 │       ├── shell.py        # subprocess 実行の薄いラッパー
 │       └── exceptions.py   # ユーザー向けメッセージを持つ例外クラス群
 └── tests/
     ├── test_local_repo.py
     ├── test_github_repo.py
-    ├── test_cli_doctor.py
+    ├── test_cli.py
     └── test_cli_version.py
 ```
 
 ### 判断理由
 
 - **`cli.py` に処理の詳細を書かない**
-  `cli.py` は Typer のオプション定義と、各ステップを順番に呼び出して
+  `cli.py` は Typer のサブコマンド定義と、各ステップを順番に呼び出して
   チェックマーク付きで出力するだけの「司令塔」に徹しています。
   実際の処理（ディレクトリ操作・git 操作・GitHub 操作）は
   `local_repo.py` / `github_repo.py` に分離しているため、
   将来 `.gitignore` 生成や LICENSE 生成などのステップを追加する場合も
   `cli.py` に1行 `_step(...)` を足すだけで済みます。
+
+- **`create` / `doctor` / `rename` を明示的なサブコマンドにした**
+  当初は `--doctor` / `--rename` をフラグとして実装していました。理由は、
+  `newrepo my-project` のように NAME を位置引数として受け取る単一コマンドに
+  Typer のサブコマンドを追加すると、Click（Typerの内部実装）の引数解析の都合上、
+  「サブコマンド名なのか、作成したいリポジトリ名なのか」を区別できず
+  誤動作したためです（実装時に実際に再現して確認しました）。
+  その後、機能が増えて「フラグの寄せ集め」が読みにくくなってきたため、
+  裸の `newrepo <name>` 呼び出しは廃止し、`newrepo create NAME` のように
+  明示的な動詞を導入する形に作り直しました。これにより `rename` は
+  `--rename NEW_NAME` という不自然なオプションではなく、
+  `newrepo rename NAME NEW_NAME` という自然な2つの位置引数にできています。
+  `--version` だけは `git --version` / `docker --version` のように
+  サブコマンドを問わず動くべきものなので、トップレベルのフラグのままにしています。
 
 - **ローカル操作と GitHub 操作を別モジュールに分離**
   「ローカルで完結する処理」と「GitHub API/CLI に依存する処理」を
@@ -262,23 +276,7 @@ newrepo/
   値の二重管理（コードとの食い違い）を避けられます。
   バージョンの更新自体は `uv version --bump minor` 等の `uv` コマンドに任せています。
 
-- **`--doctor` はサブコマンドではなくフラグとして実装**
-  `newrepo my-project` のように NAME を位置引数として受け取りつつ、
-  `newrepo doctor` のような名前付きサブコマンドも共存させようとすると、
-  Click（Typerの内部実装）の引数解析の都合上、
-  「`doctor` がサブコマンド名なのか、作成したいリポジトリ名なのか」を
-  区別できず誤動作することを実装時に確認しました。
-  この曖昧さを避けるため、事前チェックは `newrepo --doctor` という
-  フラグとして実装し、既存の `newrepo <name>` の呼び出し方は一切変更していません。
-  実体は `preflight.py` の `run_checks()` を呼び出すだけで、
-  作成フロー用の `run_all()` と実装を共有しています。
-
-- **`--rename` も同じ理由でサブコマンドにせずオプションにした**
-  `--doctor` と同様、`newrepo rename ...` のようなサブコマンドは
-  NAME との区別がつかず誤動作するため、`newrepo <現在の名前> --rename <新しい名前>`
-  という形にしています。作成時と同じく親ディレクトリから実行する設計にすることで、
-  「リネーム対象のディレクトリの中に入ってから実行する」場合に起きうる
-  「自分自身が今いるディレクトリの名前を変える」という分かりにくさを避けています。
+- **`rename` はGitHub側→ローカルの順で実行する**
   GitHub 側のリネームは `gh repo rename --yes`、ローカルの remote URL 更新は
   `git remote set-url`、最後にローカルディレクトリ自体を `Path.rename()` する
   という順序で実行し、途中で失敗した場合に中途半端な状態のまま
@@ -287,7 +285,7 @@ newrepo/
 
 - **例外は基底クラス `NewRepoError` を継承した専用クラスで表現**
   `DependencyNotFoundError` / `GitHubAuthError` / `DirectoryExistsError` /
-  `CommandExecutionError` の4種類に分け、`cli.py` 側では
+  `CommandExecutionError` などに分け、`cli.py` 側では
   `NewRepoError` を一箇所で捕捉するだけで、
   仕様に挙げられた全エラーケースに対して分かりやすい日本語メッセージを
   表示できるようにしています。
@@ -316,12 +314,13 @@ newrepo/
 
 要件に基づき、以下は MVP の対象外としています。将来的に追加する場合も、
 上記の通り `local_repo.py` / `github_repo.py` にステップを追加し、
-`cli.py` から呼び出すだけで対応できる構造にしてあります。
+`cli.py` にサブコマンドを1つ足すだけで対応できる構造にしてあります。
 
 - テンプレート機能（Cookiecutter / Copier 連携含む）
-- GitHub Actions の生成
+- GitHub Actions の生成（作成するリポジトリ側への生成。このリポジトリ自体の CI 設定とは別）
 - `.gitignore` の生成
 - LICENSE の生成
 - 設定ファイル対応
 - Organization 対応（個人アカウント配下に作成）
 - リポジトリ名とローカルディレクトリ名の別名指定
+- 削除コマンド（危険な操作のため未実装。検討中）

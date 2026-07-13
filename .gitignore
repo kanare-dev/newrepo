@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Claude Code local session state (not project config)
+.claude/

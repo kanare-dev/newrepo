@@ -78,3 +78,28 @@ def test_rename_directory_raises_if_new_path_exists(tmp_path: Path) -> None:
 
     with pytest.raises(DirectoryExistsError):
         local_repo.rename_directory(old_path, new_path)
+
+
+def test_delete_directory(tmp_path: Path) -> None:
+    target = tmp_path / "my-project"
+    target.mkdir()
+    (target / "README.md").write_text("# my-project\n", encoding="utf-8")
+
+    local_repo.delete_directory(target)
+
+    assert not target.exists()
+
+
+def test_delete_directory_raises_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "my-project"
+    target.mkdir()
+
+    def fake_rmtree(path: Path) -> None:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(local_repo.shutil, "rmtree", fake_rmtree)
+
+    with pytest.raises(CommandExecutionError):
+        local_repo.delete_directory(target)

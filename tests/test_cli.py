@@ -67,6 +67,7 @@ def test_bare_invocation_shows_help() -> None:
     assert "create" in result.output
     assert "doctor" in result.output
     assert "rename" in result.output
+    assert "delete" in result.output
 
 
 def test_create_without_name_is_an_error() -> None:
@@ -77,6 +78,12 @@ def test_create_without_name_is_an_error() -> None:
 
 def test_rename_without_new_name_is_an_error() -> None:
     result = runner.invoke(app, ["rename", "my-project"])
+
+    assert result.exit_code != 0
+
+
+def test_delete_without_name_is_an_error() -> None:
+    result = runner.invoke(app, ["delete"])
 
     assert result.exit_code != 0
 
@@ -116,3 +123,89 @@ def test_rename_dispatches_name_and_new_name_in_order(
     assert result.exit_code == 0, result.output
     assert renamed_to == ["new-name"]
     assert "Repository renamed successfully" in result.output
+
+
+def _stub_delete_preconditions(monkeypatch: pytest.MonkeyPatch) -> None:
+    from newrepo import local_repo
+
+    monkeypatch.setattr(preflight, "run_all", lambda: None)
+    monkeypatch.setattr(local_repo, "check_directory_exists", lambda path: None)
+    monkeypatch.setattr(local_repo, "check_is_git_repo", lambda path: None)
+    monkeypatch.setattr(
+        "newrepo.cli.github_repo.get_remote_origin_url",
+        lambda path: "https://github.com/you/my-project.git",
+    )
+
+
+def test_delete_aborts_when_confirmation_name_does_not_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_delete_preconditions(monkeypatch)
+    deleted_on_github = []
+    monkeypatch.setattr(
+        "newrepo.cli.github_repo.delete_repo_on_github",
+        lambda path: deleted_on_github.append(path),
+    )
+
+    result = runner.invoke(
+        app,
+        ["delete", "my-project", "--directory", str(tmp_path)],
+        input="wrong-name\n",
+    )
+
+    assert result.exit_code == 1
+    assert "一致しないため" in result.output
+    assert deleted_on_github == []
+
+
+def test_delete_proceeds_when_confirmation_name_matches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from newrepo import local_repo
+
+    _stub_delete_preconditions(monkeypatch)
+    deleted_on_github = []
+    deleted_locally = []
+    monkeypatch.setattr(
+        "newrepo.cli.github_repo.delete_repo_on_github",
+        lambda path: deleted_on_github.append(path),
+    )
+    monkeypatch.setattr(
+        local_repo, "delete_directory", lambda path: deleted_locally.append(path)
+    )
+
+    result = runner.invoke(
+        app,
+        ["delete", "my-project", "--directory", str(tmp_path)],
+        input="my-project\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(deleted_on_github) == 1
+    assert len(deleted_locally) == 1
+    assert "Repository deleted successfully" in result.output
+
+
+def test_delete_with_yes_flag_skips_confirmation_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from newrepo import local_repo
+
+    _stub_delete_preconditions(monkeypatch)
+    deleted_on_github = []
+    deleted_locally = []
+    monkeypatch.setattr(
+        "newrepo.cli.github_repo.delete_repo_on_github",
+        lambda path: deleted_on_github.append(path),
+    )
+    monkeypatch.setattr(
+        local_repo, "delete_directory", lambda path: deleted_locally.append(path)
+    )
+
+    result = runner.invoke(
+        app, ["delete", "my-project", "--directory", str(tmp_path), "--yes"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(deleted_on_github) == 1
+    assert len(deleted_locally) == 1

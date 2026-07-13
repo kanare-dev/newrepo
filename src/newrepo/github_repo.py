@@ -97,3 +97,14 @@ def update_remote_url_after_rename(path: Path, new_name: str) -> None:
     result = shell.run(["git", "remote", "set-url", "origin", new_url], cwd=path)
     if result.returncode != 0:
         raise CommandExecutionError("リモートURLの更新", result.stderr)
+
+
+def delete_repo_on_github(path: Path) -> None:
+    """GitHub 上のリポジトリを削除する（``gh repo delete``）。
+
+    削除確認は呼び出し元（``cli.py``）でリポジトリ名の再入力によって
+    行うため、ここでは ``gh`` 自身の確認プロンプトは ``--yes`` でスキップする。
+    """
+    result = shell.run(["gh", "repo", "delete", "--yes"], cwd=path)
+    if result.returncode != 0:
+        raise CommandExecutionError("GitHub リポジトリの削除", result.stderr)

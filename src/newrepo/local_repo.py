@@ -1,7 +1,8 @@
-"""ローカル側の作業（ディレクトリ作成・README作成・git操作・リネーム）。"""
+"""ローカル側の作業（ディレクトリ作成・README作成・git操作・リネーム・削除）。"""
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from . import shell
@@ -61,3 +62,10 @@ def rename_directory(old_path: Path, new_path: Path) -> None:
         old_path.rename(new_path)
     except OSError as exc:
         raise CommandExecutionError("ディレクトリのリネーム", str(exc)) from exc
+
+
+def delete_directory(path: Path) -> None:
+    try:
+        shutil.rmtree(path)
+    except OSError as exc:
+        raise CommandExecutionError("ディレクトリの削除", str(exc)) from exc

@@ -5,6 +5,7 @@
 - ``newrepo create NAME [OPTIONS]``            新規リポジトリの作成
 - ``newrepo doctor``                           前提条件（git/gh）の確認
 - ``newrepo rename NAME NEW_NAME [OPTIONS]``    リポジトリのリネーム
+- ``newrepo delete NAME [OPTIONS]``             リポジトリの削除（ローカル+GitHub、取り消し不可）
 - ``newrepo --version``                        バージョン表示
 
 ``--version`` だけは他の CLI ツール（git, docker 等）の慣例に合わせ、
@@ -197,6 +198,70 @@ def rename(
     typer.echo(str(new_target))
     typer.echo("GitHub:")
     typer.echo(github_url)
+
+
+@app.command()
+def delete(
+    name: str = typer.Argument(
+        help="削除するリポジトリ名（ローカルディレクトリ名 = GitHub リポジトリ名）",
+    ),
+    directory: Path | None = typer.Option(
+        None,
+        "--directory",
+        "-d",
+        help="対象の親ディレクトリ（デフォルト: カレントディレクトリ）",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="確認プロンプトをスキップする（デフォルト: 確認あり。取り消せない操作のため注意）",
+    ),
+) -> None:
+    """ローカルディレクトリと GitHub リポジトリの両方を削除する（取り消せません）。"""
+    base_dir = (directory or Path.cwd()).expanduser().resolve()
+    target = base_dir / name
+
+    try:
+        preflight.run_all()
+        local_repo.check_directory_exists(target)
+        local_repo.check_is_git_repo(target)
+        github_repo.get_remote_origin_url(target)
+    except NewRepoError as exc:
+        typer.secho(f"✗ {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.secho(
+        f"警告: '{name}' のローカルディレクトリと GitHub リポジトリを完全に削除します。"
+        "この操作は取り消せません。",
+        fg=typer.colors.RED,
+    )
+
+    if not yes:
+        typed_name = typer.prompt(
+            f"続行するには、リポジトリ名 '{name}' を入力してください"
+        )
+        if typed_name != name:
+            typer.secho(
+                "入力されたリポジトリ名が一致しないため、削除を中止しました。",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+    typer.echo("Deleting repository...")
+
+    try:
+        _step(
+            "GitHub repository deleted",
+            lambda: github_repo.delete_repo_on_github(target),
+        )
+        _step("Directory deleted", lambda: local_repo.delete_directory(target))
+    except NewRepoError as exc:
+        typer.secho(f"✗ {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo("Repository deleted successfully")
 
 
 if __name__ == "__main__":

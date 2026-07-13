@@ -57,7 +57,7 @@ uv run newrepo --help
 
 ## 使い方
 
-`newrepo` は `create` / `doctor` / `rename` の3つのサブコマンドを持ちます。
+`newrepo` は `create` / `doctor` / `rename` / `delete` の4つのサブコマンドを持ちます。
 
 ### `newrepo create` — リポジトリの作成
 
@@ -146,6 +146,39 @@ https://github.com/you/new-project-name
 対象ディレクトリが存在しない・git リポジトリでない・
 remote `origin` が設定されていない、といった場合は何も変更せずエラーで停止します。
 
+### `newrepo delete` — リポジトリの削除
+
+ローカルディレクトリと GitHub リポジトリの両方を削除します。**取り消せない操作です。**
+ローカルだけ・GitHub だけを個別に削除するオプションはなく、常に両方を削除します。
+
+```bash
+newrepo delete my-project
+```
+
+デフォルトでは、誤操作防止のため削除前にリポジトリ名の再入力を求める確認プロンプトが表示されます。
+入力したリポジトリ名が一致しない場合は、何も削除せずに中止します。
+
+```
+$ newrepo delete my-project
+警告: 'my-project' のローカルディレクトリと GitHub リポジトリを完全に削除します。この操作は取り消せません。
+続行するには、リポジトリ名 'my-project' を入力してください: my-project
+Deleting repository...
+✓ GitHub repository deleted
+✓ Directory deleted
+Repository deleted successfully
+```
+
+CI やスクリプトなどで確認プロンプトをスキップしたい場合は `--yes` (`-y`) を指定します
+（デフォルトはオフです。誤って付けたまま実行しないよう注意してください）。
+
+```bash
+newrepo delete my-project --yes
+```
+
+内部的には `gh repo rename` と同じ理由で、GitHub 側の削除（`gh repo delete`）を先に行い、
+最後にローカルディレクトリを削除します。GitHub 側の削除に失敗した場合はローカルディレクトリは
+削除されずに残るため、失敗時にも復旧しやすくなっています。
+
 ### `newrepo --version` — バージョン確認
 
 `--version` だけは `git` / `docker` 等の慣例に合わせ、サブコマンドではなく
@@ -194,6 +227,8 @@ uv version 1.0.0
 - `git commit` の失敗（例: コミット対象がない場合など）
 - GitHub リポジトリ作成の失敗（例: 同名リポジトリが既に存在する場合など）
 - push の失敗
+- `delete` 実行時に、確認プロンプトで入力したリポジトリ名が一致しない（何も削除せず中止）
+- GitHub リポジトリ削除の失敗（例: 認証トークンに `delete_repo` スコープがない場合など）
 
 ## 開発
 
@@ -227,8 +262,8 @@ newrepo/
 │       ├── __init__.py     # パッケージエントリポイント（app を re-export）
 │       ├── cli.py          # Typer アプリ定義。サブコマンドの組み立てと画面出力のみを担当
 │       ├── preflight.py    # git / gh の存在確認、gh auth 確認
-│       ├── local_repo.py   # ディレクトリ作成・README作成・git 操作（ローカルのみ）
-│       ├── github_repo.py  # gh によるリポジトリ作成・push・URL取得・リネーム（GitHubのみ）
+│       ├── local_repo.py   # ディレクトリ作成・README作成・git 操作・削除（ローカルのみ）
+│       ├── github_repo.py  # gh によるリポジトリ作成・push・URL取得・リネーム・削除（GitHubのみ）
 │       ├── shell.py        # subprocess 実行の薄いラッパー
 │       └── exceptions.py   # ユーザー向けメッセージを持つ例外クラス群
 └── tests/
@@ -283,6 +318,16 @@ newrepo/
   ディレクトリだけ消えてしまう、といった事態を避けています
   （ディレクトリのリネームを最後に行うのはこのため）。
 
+- **`delete` はローカル・GitHub を分割せず常に両方削除し、GitHub側→ローカルの順で実行する**
+  「ローカルだけ消す」「GitHub だけ消す」という部分削除オプションは提供せず、
+  常に両方を削除する仕様にしています。実行前には確認プロンプトで
+  リポジトリ名の再入力を必須にし（`--yes`/`-y` でスキップ可、デフォルトはオフ）、
+  取り消せない操作であることを踏まえた誤操作防止策としています。
+  削除の実行順序も `rename` と同じ理由で GitHub 側（`gh repo delete --yes`）を先に行い、
+  ローカルディレクトリの削除（`shutil.rmtree`）を最後にしています。
+  こうすることで、GitHub 側の削除に失敗した場合でもローカルディレクトリは
+  手元に残るため、失敗時にリカバリーしやすくなっています。
+
 - **例外は基底クラス `NewRepoError` を継承した専用クラスで表現**
   `DependencyNotFoundError` / `GitHubAuthError` / `DirectoryExistsError` /
   `CommandExecutionError` などに分け、`cli.py` 側では
@@ -323,4 +368,3 @@ newrepo/
 - 設定ファイル対応
 - Organization 対応（個人アカウント配下に作成）
 - リポジトリ名とローカルディレクトリ名の別名指定
-- 削除コマンド（危険な操作のため未実装。検討中）

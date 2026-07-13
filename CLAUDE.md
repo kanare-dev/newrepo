@@ -36,10 +36,10 @@ uv version --bump patch   # or minor / major
 
 `newrepo` は GitHub リポジトリ作成の定型作業（ディレクトリ作成 → README → `git init` → Initial Commit → `gh repo create` → push）を自動化する Typer 製 CLI。`src/newrepo/` 配下は責務ごとに分離している。
 
-- `cli.py` — Typer サブコマンド（`create` / `doctor` / `rename`）の定義と、各ステップの実行順序・チェックマーク付き出力のみを担当する「司令塔」。実際の処理ロジックは持たない。
-- `preflight.py` — `git`/`gh` の存在確認と `gh auth status` による認証確認。`run_all()`（作成・リネームフロー用、失敗時に例外を送出）と `run_checks()`（`doctor` 用、全項目を実行しきって結果一覧を返す）の2系統がある。
-- `local_repo.py` — ディレクトリ作成・README生成・git操作など、ローカルで完結する処理。
-- `github_repo.py` — `gh`/`git` を使った GitHub 側の操作（リポジトリ作成・push・リネーム・remote URL取得）。SSH/HTTPS どちらの remote URL 形式もリネームできるよう正規表現でパースしている（`_renamed_url`）。
+- `cli.py` — Typer サブコマンド（`create` / `doctor` / `rename` / `delete`）の定義と、各ステップの実行順序・チェックマーク付き出力のみを担当する「司令塔」。実際の処理ロジックは持たない。
+- `preflight.py` — `git`/`gh` の存在確認と `gh auth status` による認証確認。`run_all()`（作成・リネーム・削除フロー用、失敗時に例外を送出）と `run_checks()`（`doctor` 用、全項目を実行しきって結果一覧を返す）の2系統がある。
+- `local_repo.py` — ディレクトリ作成・README生成・git操作・削除など、ローカルで完結する処理。
+- `github_repo.py` — `gh`/`git` を使った GitHub 側の操作（リポジトリ作成・push・リネーム・削除・remote URL取得）。SSH/HTTPS どちらの remote URL 形式もリネームできるよう正規表現でパースしている（`_renamed_url`）。
 - `shell.py` — 全ての外部コマンド実行を集約する `subprocess.run` の薄いラッパー。ここを経由させることでテスト時にモックしやすくしている。
 - `exceptions.py` — `NewRepoError` を基底クラスとした専用例外群。`str(exc)` がそのままユーザー向けの日本語エラーメッセージになる。`cli.py` 側は `NewRepoError` を1箇所で捕捉するだけでよい。
 
@@ -47,13 +47,17 @@ uv version --bump patch   # or minor / major
 
 - **CLI のトップレベルはサブコマンド構成（`create`/`doctor`/`rename`）＋ `--version` のみフラグ**という非対称な構成になっている。理由は Typer（内部は Click）の制約: NAME を位置引数として受け取る単一コマンドに Click の Group（サブコマンド）を追加すると、「サブコマンド名」なのか「位置引数の値」なのかを Click が区別できず誤動作する（実装時に実際に再現して確認済み）。そのため裸の `newrepo NAME` のような呼び出し方は採用していない。今後サブコマンドを追加する際もこの制約を踏まえること。
 - **`rename` は GitHub 側 → ローカルの順で実行する**（`gh repo rename` → `git remote set-url` → 最後に `Path.rename()` でローカルディレクトリをリネーム）。ディレクトリのリネームを最後にしているのは、途中で失敗した際に「ディレクトリだけ消えて中途半端な状態になる」事態を避けるため。
+- **`delete` はローカル・GitHub 両方を常に削除する（`--local-only` のような部分削除フラグは提供しない）**。安全策として以下を実装している:
+  - 実行前に確認プロンプトでリポジトリ名の再入力を必須にする（`--yes`/`-y` でスキップ可能、デフォルトはオフ）。入力が一致しない場合は何も削除せず中止する。
+  - 削除順序は `rename` と同じ理由で **GitHub 側 → ローカルの順**（`gh repo delete --yes` → `shutil.rmtree`）。GitHub 側の削除が先に失敗すればローカルは手元に残るため復旧しやすく、逆にローカルを先に消してしまうと GitHub 側の削除に失敗した場合の被害が大きくなるため。
+  - `gh repo delete` 自体の確認プロンプトは newrepo 側で確認済みのため `--yes` で二重確認を避けている。
 - **バージョンは `pyproject.toml` の `version` フィールドを唯一の情報源とする**。`cli.py` の `--version` はソースに文字列を埋め込まず `importlib.metadata.version("newrepo")` で取得している。バージョン更新は `uv version --bump <level>` を使う運用（README参照）。
 - **`gh repo create --source=. --remote=origin`** を使うことで、GitHub上でのリポジトリ作成とローカルの remote 設定を1コマンドで済ませている（`gh` の機能に乗る形でシンプルさを優先）。push だけは失敗時の切り分けをしやすくするため `git push -u origin HEAD` として別コマンドにしている。
 - **ruff の `B008` は意図的に無視している**（`pyproject.toml` の `[tool.ruff.lint]`）。Typer の `Option()`/`Argument()` を引数のデフォルト値として呼び出すのが定型パターンであり、これに対する誤検知のため。
 
 ### 実装していない機能（スコープ外）
 
-テンプレート機能、`.gitignore`/LICENSE/GitHub Actions の自動生成（作成するリポジトリ側への生成）、設定ファイル対応、Organization対応、リポジトリ名の別名指定、削除コマンド（危険な操作のため保留中）は意図的に未実装。詳細と理由は README.md の「スコープ外」セクション参照。
+テンプレート機能、`.gitignore`/LICENSE/GitHub Actions の自動生成（作成するリポジトリ側への生成）、設定ファイル対応、Organization対応、リポジトリ名の別名指定は意図的に未実装。詳細と理由は README.md の「スコープ外」セクション参照。
 
 ## 開発状況（進捗・次にやること）
 
@@ -74,15 +78,11 @@ uv version --bump patch   # or minor / major
 - CLI 構造を `--doctor`/`--rename` フラグ方式から `create`/`doctor`/`rename` の明示的サブコマンド構成に作り直し（裸の `newrepo NAME` は廃止した破壊的変更）
 - ruff・mypy 導入 + GitHub Actions CI（`.github/workflows/ci.yml`、push/PR時に自動実行）
 - CLAUDE.md 整備（このファイル）、`.claude/` を `.gitignore` に追加
+- `delete` コマンド（`newrepo delete NAME`） — ユーザーと合意した安全設計で実装済み: 確認プロンプトでのリポジトリ名再入力必須（`--yes`/`-y` でスキップ可、デフォルトはオフ）、ローカル・GitHub は常に両方削除（`--local-only` のような分割フラグはなし）、削除順序は GitHub 側 → ローカルの順（詳細は上記「設計上の重要な制約」参照）
 
 ### 次にやりたいこと（優先度順）
 
-1. **削除コマンド（`newrepo delete NAME` 想定）** — 最優先。危険な操作（ローカルディレクトリ削除・GitHubリポジトリ削除は取り消せない）のため、実装前に安全策の設計合意が必要。検討中の論点:
-   - 確認プロンプトでリポジトリ名の再入力を必須にする（`gh repo delete` 自体もこの安全策を持つ）
-   - ローカル削除とリモート削除を分けるか（例: `--local-only` フラグ）、常に両方削除するか
-   - `--yes`/`--force` のような確認スキップは用意するか、するとしてもデフォルトはオフ
-   - 実装に入る前に、必ずユーザーと安全設計について合意を取ること（過去のやり取りでも「危ないから一旦保留」となった経緯がある）
-2. **pre-commit フックの導入**（優先度低め） — 現状 ruff/mypy/pytest は push 後の CI でのみ検証される。commit 前にローカルで自動チェックできるようにする改善。
+1. **pre-commit フックの導入**（優先度低め） — 現状 ruff/mypy/pytest は push 後の CI でのみ検証される。commit 前にローカルで自動チェックできるようにする改善。
 
 ## 環境まわりの注意点（macOS + SSH commit署名）
 

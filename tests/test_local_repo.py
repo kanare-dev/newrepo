@@ -35,9 +35,13 @@ def test_create_readme(tmp_path: Path) -> None:
     assert readme.read_text(encoding="utf-8") == "# my-project\n"
 
 
-def test_git_commit_raises_on_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_git_commit_raises_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def fake_run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(args, returncode=1, stdout="", stderr="nothing to commit")
+        return subprocess.CompletedProcess(
+            args, returncode=1, stdout="", stderr="nothing to commit"
+        )
 
     monkeypatch.setattr(local_repo.shell, "run", fake_run)
 

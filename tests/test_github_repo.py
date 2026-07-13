@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from newrepo.github_repo import _renamed_url
 from newrepo.exceptions import CommandExecutionError
+from newrepo.github_repo import _renamed_url
 
 
 @pytest.mark.parametrize(

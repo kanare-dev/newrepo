@@ -1,5 +1,7 @@
 # newrepo
 
+[![CI](https://github.com/kanare-dev/newrepo/actions/workflows/ci.yml/badge.svg)](https://github.com/kanare-dev/newrepo/actions/workflows/ci.yml)
+
 GitHub リポジトリ作成時の定型作業を自動化する CLI ツールです。
 
 ```
@@ -196,14 +198,28 @@ uv version 1.0.0
 ## 開発
 
 ```bash
-uv sync
+uv sync --all-groups
+
+# テスト
 uv run pytest
+
+# lint（ruff）
+uv run ruff check .
+
+# 型チェック（mypy）
+uv run mypy
 ```
+
+`main` ブランチへの push と Pull Request 作成時に、GitHub Actions
+（`.github/workflows/ci.yml`）が上記3つ（pytest / ruff / mypy）を自動実行します。
 
 ## 設計方針・ディレクトリ構成
 
 ```
 newrepo/
+├── .github/
+│   └── workflows/
+│       └── ci.yml          # push / PR時に pytest・ruff・mypy を自動実行
 ├── pyproject.toml
 ├── README.md
 ├── src/

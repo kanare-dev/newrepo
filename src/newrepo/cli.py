@@ -15,7 +15,6 @@ from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _package_version
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -70,7 +69,7 @@ def _run_doctor() -> None:
     raise typer.Exit(code=1)
 
 
-def _run_rename(name: str, new_name: str, directory: Optional[Path]) -> None:
+def _run_rename(name: str, new_name: str, directory: Path | None) -> None:
     """既存のリポジトリを、ローカルディレクトリ・GitHub の両方でリネームする。"""
     if new_name == name:
         typer.secho(
@@ -120,7 +119,7 @@ def _run_rename(name: str, new_name: str, directory: Optional[Path]) -> None:
 
 @app.command()
 def main(
-    name: Optional[str] = typer.Argument(
+    name: str | None = typer.Argument(
         None,
         help="作成/操作対象のリポジトリ名(ローカルディレクトリ名 = GitHub リポジトリ名)。"
         "--doctor / --version 指定時は不要。",
@@ -137,7 +136,7 @@ def main(
         "--public",
         help="GitHub リポジトリを Public として作成する（デフォルト: Private）",
     ),
-    directory: Optional[Path] = typer.Option(
+    directory: Path | None = typer.Option(
         None,
         "--directory",
         "-d",
@@ -148,7 +147,7 @@ def main(
         "--doctor",
         help="git/gh のインストール状況と GitHub CLI の認証状態のみを確認して終了する",
     ),
-    rename: Optional[str] = typer.Option(
+    rename: str | None = typer.Option(
         None,
         "--rename",
         metavar="NEW_NAME",

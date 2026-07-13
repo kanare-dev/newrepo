@@ -13,7 +13,9 @@ from pathlib import Path
 from . import shell
 from .exceptions import CommandExecutionError, RemoteNotConfiguredError
 
-_REMOTE_URL_PATTERN = re.compile(r"^(?P<prefix>.*[:/])(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?P<suffix>\.git)?$")
+_REMOTE_URL_PATTERN = re.compile(
+    r"^(?P<prefix>.*[:/])(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?P<suffix>\.git)?$"
+)
 
 
 def create_repo(path: Path, name: str, public: bool) -> None:

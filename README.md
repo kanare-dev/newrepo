@@ -117,6 +117,36 @@ All checks passed. newrepo is ready to use.
 
 いずれかのチェックに失敗した場合は `✗` と対処方法が表示され、終了コード 1 で終了します。
 
+### リポジトリ名の変更（`--rename`）
+
+作成済みのリポジトリの名前を、ローカルディレクトリ・GitHub リポジトリの
+両方で一度に変更できます。`newrepo` を作成時と同じ、親ディレクトリから
+実行します（対象ディレクトリの中に入る必要はありません）。
+
+```bash
+newrepo my-project --rename new-project-name
+newrepo my-project --rename new-project-name --directory ~/projects
+```
+
+```
+$ newrepo my-project --rename new-project-name
+Renaming repository...
+✓ GitHub repository renamed
+✓ Remote URL updated
+✓ Directory renamed
+Repository renamed successfully
+Location:
+/Users/you/new-project-name
+GitHub:
+https://github.com/you/new-project-name
+```
+
+内部的には `gh repo rename` で GitHub 側の名前を変更したのち、
+ローカルの remote `origin` の URL を新しい名前に更新し、
+最後にローカルディレクトリ自体をリネームします。
+対象ディレクトリが存在しない・git リポジトリでない・
+remote `origin` が設定されていない、といった場合は何も変更せずエラーで停止します。
+
 ## エラーハンドリング
 
 以下のケースでは、処理を中断しわかりやすいエラーメッセージを表示します（終了コード 1）。
@@ -153,6 +183,7 @@ newrepo/
 │       └── exceptions.py   # ユーザー向けメッセージを持つ例外クラス群
 └── tests/
     ├── test_local_repo.py
+    ├── test_github_repo.py
     └── test_cli_doctor.py
 ```
 
@@ -182,6 +213,18 @@ newrepo/
   フラグとして実装し、既存の `newrepo <name>` の呼び出し方は一切変更していません。
   実体は `preflight.py` の `run_checks()` を呼び出すだけで、
   作成フロー用の `run_all()` と実装を共有しています。
+
+- **`--rename` も同じ理由でサブコマンドにせずオプションにした**
+  `--doctor` と同様、`newrepo rename ...` のようなサブコマンドは
+  NAME との区別がつかず誤動作するため、`newrepo <現在の名前> --rename <新しい名前>`
+  という形にしています。作成時と同じく親ディレクトリから実行する設計にすることで、
+  「リネーム対象のディレクトリの中に入ってから実行する」場合に起きうる
+  「自分自身が今いるディレクトリの名前を変える」という分かりにくさを避けています。
+  GitHub 側のリネームは `gh repo rename --yes`、ローカルの remote URL 更新は
+  `git remote set-url`、最後にローカルディレクトリ自体を `Path.rename()` する
+  という順序で実行し、途中で失敗した場合に中途半端な状態のまま
+  ディレクトリだけ消えてしまう、といった事態を避けています
+  （ディレクトリのリネームを最後に行うのはこのため）。
 
 - **例外は基底クラス `NewRepoError` を継承した専用クラスで表現**
   `DependencyNotFoundError` / `GitHubAuthError` / `DirectoryExistsError` /

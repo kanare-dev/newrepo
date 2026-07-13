@@ -52,3 +52,27 @@ class CommandExecutionError(NewRepoError):
         if detail:
             message += f"\n詳細:\n{detail}"
         super().__init__(message)
+
+
+class RepositoryNotFoundError(NewRepoError):
+    """リネーム対象のディレクトリが存在しない場合のエラー。"""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        super().__init__(f"ディレクトリが見つかりません: {path}")
+
+
+class NotAGitRepositoryError(NewRepoError):
+    """対象ディレクトリが git リポジトリではない場合のエラー。"""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        super().__init__(f"git リポジトリではありません: {path}")
+
+
+class RemoteNotConfiguredError(NewRepoError):
+    """リモート 'origin' が設定されていない場合のエラー。"""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        super().__init__(f"リモート 'origin' が設定されていません: {path}")

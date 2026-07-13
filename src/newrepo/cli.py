@@ -3,6 +3,10 @@
 ``newrepo <name>`` 実行時の一連の処理（ディレクトリ作成 → README作成 →
 git init → Initial Commit → GitHub リポジトリ作成 → push）を
 順番に実行し、各ステップの結果を画面に出力する。
+
+``--doctor`` / ``--rename`` はサブコマンドではなくオプションとして実装している。
+NAME を位置引数として受け取る単一コマンドに Typer のサブコマンドを追加すると、
+Click の引数解析上「サブコマンド名」と「NAME」を区別できず誤動作するため。
 """
 
 from __future__ import annotations
@@ -49,11 +53,59 @@ def _run_doctor() -> None:
     raise typer.Exit(code=1)
 
 
+def _run_rename(name: str, new_name: str, directory: Optional[Path]) -> None:
+    """既存のリポジトリを、ローカルディレクトリ・GitHub の両方でリネームする。"""
+    if new_name == name:
+        typer.secho(
+            "エラー: 新しい名前が現在の名前と同じです。",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    base_dir = (directory or Path.cwd()).expanduser().resolve()
+    target = base_dir / name
+    new_target = base_dir / new_name
+
+    typer.echo("Renaming repository...")
+
+    try:
+        preflight.run_all()
+
+        local_repo.check_directory_exists(target)
+        local_repo.check_is_git_repo(target)
+        github_repo.get_remote_origin_url(target)
+
+        _step(
+            "GitHub repository renamed",
+            lambda: github_repo.rename_repo_on_github(target, new_name),
+        )
+        _step(
+            "Remote URL updated",
+            lambda: github_repo.update_remote_url_after_rename(target, new_name),
+        )
+        _step(
+            "Directory renamed",
+            lambda: local_repo.rename_directory(target, new_target),
+        )
+    except NewRepoError as exc:
+        typer.secho(f"✗ {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+
+    github_url = github_repo.get_repo_url(new_target)
+
+    typer.echo("Repository renamed successfully")
+    typer.echo("Location:")
+    typer.echo(str(new_target))
+    typer.echo("GitHub:")
+    typer.echo(github_url)
+
+
 @app.command()
 def main(
     name: Optional[str] = typer.Argument(
         None,
-        help="作成するリポジトリ名(ローカルディレクトリ名 = GitHub リポジトリ名)。"
+        help="作成/操作対象のリポジトリ名(ローカルディレクトリ名 = GitHub リポジトリ名)。"
         "--doctor 指定時は不要。",
     ),
     public: bool = typer.Option(
@@ -65,17 +117,36 @@ def main(
         None,
         "--directory",
         "-d",
-        help="作成先の親ディレクトリ（デフォルト: カレントディレクトリ）",
+        help="対象の親ディレクトリ（デフォルト: カレントディレクトリ）",
     ),
     doctor: bool = typer.Option(
         False,
         "--doctor",
         help="git/gh のインストール状況と GitHub CLI の認証状態のみを確認して終了する",
     ),
+    rename: Optional[str] = typer.Option(
+        None,
+        "--rename",
+        metavar="NEW_NAME",
+        help="NAME で指定した既存のリポジトリを NEW_NAME にリネームする"
+        "（ローカルディレクトリ・GitHub リポジトリの両方）",
+    ),
 ) -> None:
     """新規ディレクトリの作成から GitHub への push までを一括実行する。"""
     if doctor:
         _run_doctor()
+        return
+
+    if rename is not None:
+        if name is None:
+            typer.secho(
+                "エラー: リネーム対象の現在の名前（NAME）を指定してください"
+                "（例: newrepo my-project --rename new-name）",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        _run_rename(name=name, new_name=rename, directory=directory)
         return
 
     if name is None:

@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from newrepo import local_repo
-from newrepo.exceptions import CommandExecutionError, DirectoryExistsError
+from newrepo.exceptions import (
+    CommandExecutionError,
+    DirectoryExistsError,
+    NotAGitRepositoryError,
+    RepositoryNotFoundError,
+)
 
 
 def test_create_directory(tmp_path: Path) -> None:
@@ -38,3 +43,34 @@ def test_git_commit_raises_on_failure(tmp_path: Path, monkeypatch: pytest.Monkey
 
     with pytest.raises(CommandExecutionError):
         local_repo.git_commit(tmp_path)
+
+
+def test_check_directory_exists_raises_if_missing(tmp_path: Path) -> None:
+    with pytest.raises(RepositoryNotFoundError):
+        local_repo.check_directory_exists(tmp_path / "missing")
+
+
+def test_check_is_git_repo_raises_if_not_git(tmp_path: Path) -> None:
+    with pytest.raises(NotAGitRepositoryError):
+        local_repo.check_is_git_repo(tmp_path)
+
+
+def test_rename_directory(tmp_path: Path) -> None:
+    old_path = tmp_path / "old-name"
+    old_path.mkdir()
+    new_path = tmp_path / "new-name"
+
+    local_repo.rename_directory(old_path, new_path)
+
+    assert not old_path.exists()
+    assert new_path.is_dir()
+
+
+def test_rename_directory_raises_if_new_path_exists(tmp_path: Path) -> None:
+    old_path = tmp_path / "old-name"
+    old_path.mkdir()
+    new_path = tmp_path / "new-name"
+    new_path.mkdir()
+
+    with pytest.raises(DirectoryExistsError):
+        local_repo.rename_directory(old_path, new_path)

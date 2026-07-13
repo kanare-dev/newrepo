@@ -55,6 +55,29 @@ uv version --bump patch   # or minor / major
 
 テンプレート機能、`.gitignore`/LICENSE/GitHub Actions の自動生成（作成するリポジトリ側への生成）、設定ファイル対応、Organization対応、リポジトリ名の別名指定、削除コマンド（危険な操作のため保留中）は意図的に未実装。詳細と理由は README.md の「スコープ外」セクション参照。
 
+## 開発状況（進捗・次にやること）
+
+このセクションはセッション間で開発の続きを引き継ぐためのもの。作業が進んだら随時更新すること。
+
+### 完了したこと
+
+- MVP: `create`（ディレクトリ作成 → README → `git init` → Initial Commit → `gh repo create` → push）、`--public`、`--directory`
+- `doctor`（前提条件チェック: git/gh インストール・`gh auth` 認証状態）
+- `rename`（ローカルディレクトリ・GitHubリポジトリ名を一括変更）
+- `--version`（`pyproject.toml` の `version` を唯一の情報源として表示）
+- CLI 構造を `--doctor`/`--rename` フラグ方式から `create`/`doctor`/`rename` の明示的サブコマンド構成に作り直し（裸の `newrepo NAME` は廃止した破壊的変更）
+- ruff・mypy 導入 + GitHub Actions CI（`.github/workflows/ci.yml`、push/PR時に自動実行）
+- CLAUDE.md 整備（このファイル）、`.claude/` を `.gitignore` に追加
+
+### 次にやりたいこと（優先度順）
+
+1. **削除コマンド（`newrepo delete NAME` 想定）** — 最優先。危険な操作（ローカルディレクトリ削除・GitHubリポジトリ削除は取り消せない）のため、実装前に安全策の設計合意が必要。検討中の論点:
+   - 確認プロンプトでリポジトリ名の再入力を必須にする（`gh repo delete` 自体もこの安全策を持つ）
+   - ローカル削除とリモート削除を分けるか（例: `--local-only` フラグ）、常に両方削除するか
+   - `--yes`/`--force` のような確認スキップは用意するか、するとしてもデフォルトはオフ
+   - 実装に入る前に、必ずユーザーと安全設計について合意を取ること（過去のやり取りでも「危ないから一旦保留」となった経緯がある）
+2. **pre-commit フックの導入**（優先度低め） — 現状 ruff/mypy/pytest は push 後の CI でのみ検証される。commit 前にローカルで自動チェックできるようにする改善。
+
 ## 環境まわりの注意点（macOS + SSH commit署名）
 
 このリポジトリは commit を SSH 鍵で署名する設定（`git config commit.gpgsign` / `user.signingkey`）を使っている環境がある。署名鍵が ssh-agent に読み込まれていない状態だと、`git commit` 実行時に `ssh-keygen -Y sign` が passphrase 入力（Touch ID等）を待って非対話環境ではハングすることがある。
